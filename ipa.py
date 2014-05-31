@@ -93,23 +93,28 @@ class Segment(set):
         self.seg = seg
         self.ipa = ipa
 
-    def punctuate(self, feat,  remove=None):
+    def punctuate(self, feat, remove=None):
         if self.seg:
             raise NewSegment(Segment(feat))
         else:
             self.update(feat)
 
-    def segment(self, feat, remove=None):
-        print("Segment {}".format(feat))
+    def segment(self, feat, remove=None, ipa=''):
         if self.seg:
-            raise NewSegment(Segment(feat, seg=True))
+            raise NewSegment(Segment(feat, seg=True, ipa=ipa))
         else:
-            self.update(feat)
             self.seg = True
+            self.update(feat)
+            if ipa is not '':
+                self.ipa += ipa
+                raise SkipRecordingIpa
 
-    def diacriticize(self, feat, remove=None):
+    def diacriticize(self, feat, remove=None, ipa=''):
         if self.seg:
             self.update(feat)
+            if ipa is not '':
+                self.ipa += ipa
+                raise SkipRecordingIpa
         else:
             raise ValueError("Not expecting a diacritic before a segment")
 
@@ -137,11 +142,12 @@ def to_segments(ipa):
         try:
             try:
                 lut[i](seg, chars)
+                seg.ipa = seg.ipa + i
             except NewSegment as new: #need to output the current segment
-                print("Emitted {}".format(seg))
                 yield seg
                 seg = new.new_segment
-            seg.ipa = seg.ipa + i
+                if seg.ipa is '':
+                    seg.ipa = seg.ipa + i
         except SkipRecordingIpa:
             pass
     if seg.seg:
@@ -312,7 +318,7 @@ def explicit_diacritic(segment, characters):
     contents = ''.join(until(characters, '>'))
     things = re.split(",", contents)
     [diacritic_lut[thing](segment, characters) for thing in things]
-    raise SkipRecordingIpa
+    segment.diacriticize({}, ipa="<" + contents + ">")
 
 lut['<'] = explicit_diacritic
 
@@ -322,8 +328,6 @@ def explicit_segment(segment, characters):
     contents = ''.join(until(characters,'}'))
     things = re.split(",", contents)
     feats = [features[thing] for thing in things]
-    segment.segment(feats)
-    segment.ipa = segment.ipa + "{" + contents + "}"
-    raise SkipRecordingIpa
+    s = segment.segment(feats, ipa="{" + contents + "}")
 
 lut['{'] = explicit_segment

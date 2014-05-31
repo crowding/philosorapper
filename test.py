@@ -1,6 +1,6 @@
 import ipa
 
-#Test the Kirshenbaum-to-ascii-IPA parser
+#Test the Kirshenbaum-IPA parser
 
 class TestKirshenbaum:
     def test_simple(self):
@@ -41,4 +41,7 @@ class TestKirshenbaum:
             {'unexploded', 'voiced', 'velar', 'aspirated', 'stop'})
 
     def test_explicit_segment(self):
-        tag = list(ipa.to_segments("{vls,alv,stp}{asp,lng,rnd,low,vwl}{low,fnt,unr,vwl}{vcd,vel,stp}"))
+        tag = list(ipa.to_segments("{vls,alv,stp}{low,fnt,unr,vwl}{vcd,vel,stp}"))
+        assert tag[2].issuperset(
+            {'voiced', 'velar', 'stop'})
+        assert tag[2].ipa == "{vcd,vel,stp}"
