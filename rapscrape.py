@@ -46,6 +46,7 @@ def song_urls_from_page_url(url, base_uel):
 def abs_urls(relative_urls, base_url):
     return [parse.urljoin(base_url, x) for x in relative_urls]
 
+
 def song_lyrics_from_soup(soup):
     return soup.find("div", "lyrics").text
     pass
@@ -64,5 +65,3 @@ def scrape_artist_to_file(rapper, filename):
 
 if (__name__ == "__main__"):
     scrape_artist_to_file("Jay-z", "jay_z_lyrics.txt")
-    
-
