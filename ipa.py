@@ -80,9 +80,6 @@ class NewSegment(Exception):
         self.new_segment = new_segment
     pass
 
-class SkipRecordingIpa(Exception):
-    pass
-
 class Segment(set):
     def __init__(self, init, ipa = '', seg = False):
         set.__init__(self, init)
@@ -93,7 +90,7 @@ class Segment(set):
         self.seg = seg
         self.ipa = ipa
 
-    def punctuate(self, feat, remove=None):
+    def punctuate(self, feat, remove=None, ipa=''):
         if self.seg:
             raise NewSegment(Segment(feat))
         else:
@@ -105,16 +102,13 @@ class Segment(set):
         else:
             self.seg = True
             self.update(feat)
-            if ipa is not '':
-                self.ipa += ipa
-                raise SkipRecordingIpa
+            self.ipa += ipa
 
-    def diacriticize(self, feat, remove=None, ipa=''):
+    def diacriticize(self, feat, remove={}, ipa=''):
         if self.seg:
             self.update(feat)
-            if ipa is not '':
-                self.ipa += ipa
-                raise SkipRecordingIpa
+            self.difference_update(remove)
+            self.ipa += ipa
         else:
             raise ValueError("Not expecting a diacritic before a segment")
 
@@ -140,16 +134,10 @@ def to_segments(ipa):
     chars = iter(ipa)
     for i in chars:
         try:
-            try:
-                lut[i](seg, chars)
-                seg.ipa = seg.ipa + i
-            except NewSegment as new: #need to output the current segment
-                yield seg
-                seg = new.new_segment
-                if seg.ipa is '':
-                    seg.ipa = seg.ipa + i
-        except SkipRecordingIpa:
-            pass
+            lut[i](seg, chars, i)
+        except NewSegment as new: #need to output the current segment
+            yield seg
+            seg = new.new_segment
     if seg.seg:
         seg.diacriticize({wend, lend})
         yield seg
@@ -157,8 +145,8 @@ def to_segments(ipa):
 ### Many single characters refer to the most common segments.
 
 def segment(feats):
-    def apply(segment, _chars):
-        segment.segment(feats)
+    def apply(segment, _chars, ipa):
+        segment.segment(feats, ipa=ipa)
     return apply
 
 lut = {}
@@ -225,11 +213,11 @@ def diacritic(when_consonant, when_vowel=None,
     if when_vowel is None:
         when_vowel = when_consonant
 
-    def apply(seg, _chars):
+    def apply(seg, _chars, ipa):
         if vwl in seg:
-            seg.diacriticize(when_vowel, remove_when_vowel)
+            seg.diacriticize(when_vowel, remove_when_vowel, ipa=ipa)
         else:
-            seg.diacriticize(when_consonant, remove_when_consonant)
+            seg.diacriticize(when_consonant, remove_when_consonant, ipa=ipa)
 
     return apply
 
@@ -262,8 +250,8 @@ lut['`'] = backtick
 ### modify preceding.
 
 def punctuation(feats):
-    def apply(seg, _chars):
-        seg.punctuate(feats)
+    def apply(seg, _chars, ipa):
+        seg.punctuate(feats, ipa=ipa)
     return apply
 
 lut['#'] = punctuation({}) # syllable boundary...
@@ -279,19 +267,19 @@ lut['4'] = punctuation({t4})
 #I'm making space and newline act as both diacritic and punctuation
 #(since word/line endings are probably important enough to recoird directly)
 
-def space(seg, _chars):
+def space(seg, _chars, ipa):
     if seg.seg:
-        seg.diacriticize({wend})
+        seg.diacriticize({wend}, ipa=ipa)
         raise NewSegment(Segment({word}))
     else:
-        seg.punctuate({word})
+        seg.punctuate({word}, ipa=ipa)
 
-def newline(seg, _chars):
+def newline(seg, _chars, ipa):
     if seg.seg:
-        seg.diacriticize({wend, lend})
+        seg.diacriticize({wend, lend}, ipa=ipa)
         raise NewSegment(Segment({word, line}))
     else:
-        seg.punctuate({word, line})
+        seg.punctuate({word, line}, ipa=ipa)
 
 lut[' '] = space
 lut['\n'] = newline
@@ -314,20 +302,20 @@ def until(gen, delimiter):
         else:
             yield x
 
-def explicit_diacritic(segment, characters):
+def explicit_diacritic(segment, characters, ipa):
     contents = ''.join(until(characters, '>'))
     things = re.split(",", contents)
-    [diacritic_lut[thing](segment, characters) for thing in things]
-    segment.diacriticize({}, ipa="<" + contents + ">")
+    [diacritic_lut[thing](segment, characters, ipa='') for thing in things]
+    segment.diacriticize({}, ipa=ipa + contents + ">")
 
 lut['<'] = explicit_diacritic
 
 ### Explicit segments have a set of feature abbreviations delimited by {}.
 
-def explicit_segment(segment, characters):
+def explicit_segment(segment, characters, ipa):
     contents = ''.join(until(characters,'}'))
     things = re.split(",", contents)
     feats = [features[thing] for thing in things]
-    s = segment.segment(feats, ipa="{" + contents + "}")
+    s = segment.segment(feats, ipa=ipa + contents + "}")
 
 lut['{'] = explicit_segment
